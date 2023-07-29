@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>공간 추가</title>
+  <link rel="stylesheet" href="./popup.css">
+  <script src="popup.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="popupSection">
+    <div class="titleSection">
+      <div class="mainTitle">Time Timer Mod</div>
+      <div class="subTItle">for chrome browser</div>
+      <div class="descTitle">Check your timer while using chrome. And don't waste your precious time. </div>
+    </div>
+  <div class="setTimerSection">
+    <!-- <label for="set-minutes">Setup time:</label> -->
+    <input class="inputDuration" type="number" id="set-minutes" min="1" max="60" placeholder="Enter duration(1 ~ 60)" required>
+  </div>
+  <div class="leftTimerSection">
+    <div><span id="leftMin">0</span> m <span id="leftSec">0</span> s Left...</div>
+  </div>
+  <div class="btnSection">
+    <button class="btn test8" id="on-off-btn">On off
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+    <button class="btn" id="start-btn" class="start">start
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+    <!-- <button class="btn" id="pause-timer-btn" class="pause">pause
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+    </button> -->
+    <button class="btn" id="reset-timer-btn" class="reset">stop
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+    <!-- <button id="dark-mode-btn" class="dark">dark</button> -->
+  </div>
+  </div>
+</body>
+</html>
