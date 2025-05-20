@@ -23,6 +23,7 @@ chrome.runtime.onInstalled.addListener(() => {
                     givenNum = message.number;
                     // calculateAngle();
                     sendToContent('startTimer', minutes * 60);
+                    sendToContent('showCanvas', true); // 타이머 시작시 캔버스 표시
                     // drawStart();
                 }
                 if (message.action === 'stopTimer') {
@@ -61,10 +62,13 @@ chrome.tabs.onUpdated.addListener(function (tabId, changeInfo, tab) {
             // 현재 타이머가 작동 중이라면
             console.log('LEFT TIME : ', remainingTime);
             sendToContent('startTimer', remainingTime, isRunning);
+            // 타이머 실행 중에는 항상 canvas가 보이도록 함
+            sendToContent('showCanvas', true, isRunning);
+        } else {
+            // 현재 타이머가 작동 중이지 않으면
+            console.log('default comming from bg')
+            sendToContent('default', isShowing, isRunning);
         }
-        // 현재 타이머가 작동 중이지 않으면
-        console.log('default comming from bg')
-        sendToContent('default', isShowing, isRunning);
     }
 });
 
@@ -76,11 +80,17 @@ function sendToContent(action, inputMinuteValue, isRunning) {
                 target: { tabId: tabs[0].id },
                 files: ['content.js']
             }, function () {
-                // content.js에 "action" 메시지 전달
-                chrome.tabs.sendMessage(tabs[0].id, { action: action, inputMinuteValue: inputMinuteValue, isRunning: isRunning });
+                // 타이머가 실행 중이면 isShowing을 true로 강제
+                const shouldShow = isRunning ? true : isShowing;
+
+                // content.js에 메시지 전달
+                chrome.tabs.sendMessage(tabs[0].id, {
+                    action: action,
+                    inputMinuteValue: inputMinuteValue,
+                    isRunning: isRunning,
+                    isShowing: shouldShow // isShowing 상태 전달
+                });
             });
-
-
         } else {
             console.error('Unable to execute content script. Invalid tab information.');
         }
@@ -93,6 +103,7 @@ function sendToContent(action, inputMinuteValue, isRunning) {
 // 타이머 시작 클릭 시 실행 함수
 function startTimer(minutes) {
     isRunning = true;
+    isShowing = true;
     clearInterval(timerInterval);
     if (remainingTime) {
         setMintoSecTime = remainingTime

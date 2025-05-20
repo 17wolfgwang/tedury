@@ -21,6 +21,11 @@ window.addEventListener("resize", resizeCanvas);
 
 // background.js로 부터 메세지 수신.
 chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+    // 메시지에서 isShowing 상태 추출
+    if (message.isShowing !== undefined) {
+        isShowing = message.isShowing;
+    }
+
     if (message.action === 'default') {
         // 확장 프로그램 시작 시 Canvas 그리고 default로 숨기기
         if (!message.isRunning) {
@@ -49,6 +54,9 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
         //     inputMin = message.inputMinuteValue;
         // }
         inputMin = message.inputMinuteValue;
+        // 타이머가 시작되면 항상 canvas를 보이게 설정
+        isShowing = true;
+        canvasDisplayOnOff(true);
 
         startTimer();
 
