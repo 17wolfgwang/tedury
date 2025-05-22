@@ -1,9 +1,14 @@
+// 타이머 상태를 중앙에서 관리
+const timerState = {
+    isRunning: false,
+    isShowing: false,
+    startTime: null,
+    duration: null,
+    remainingTime: null,
+    elapsedRatio: 0
+};
+
 let timerInterval;
-let setMintoSecTime = 0;
-let remainingTime = null;
-let isRunning, isShowing = false;
-let endAngle;
-let givenNum;
 
 // FROM POPUP.JS 에서 받은 메세지
 chrome.runtime.onInstalled.addListener(() => {
@@ -11,40 +16,20 @@ chrome.runtime.onInstalled.addListener(() => {
         if (port.name === 'popup') {
             port.onMessage.addListener(function (message) {
                 if (message.action === 'showCanvas') {
-                    // ON/OFF 버튼 클릭 시
-                    isShowing = (isShowing === false) ? true : false;
-                    console.log('from bg is showing? : ', isShowing)
-                    sendToContent('showCanvas', isShowing);
+                    timerState.isShowing = !timerState.isShowing;
+                    console.log('Canvas visibility changed:', timerState.isShowing);
+                    broadcastState();
                 }
                 if (message.action === 'sendNumber') {
-                    // 타이머 시작 클릭 시 + 세팅 시간(분)
                     const minutes = message.number;
                     startTimer(minutes);
-                    givenNum = message.number;
-                    // calculateAngle();
-                    sendToContent('startTimer', minutes * 60);
-                    sendToContent('showCanvas', true); // 타이머 시작시 캔버스 표시
-                    // drawStart();
                 }
                 if (message.action === 'stopTimer') {
-                    // 타이머 정지 클릭 시 
                     console.log('Stop received!');
-                    sendToContent('stopTimer');
                     stopTimer();
-                }
-                // if (message.action === 'pauseTimer') {
-                //     //타이머 일시정지 클릭 시 + 남은시간 전달(초?)
-                //     console.log('Pause received!');
-                //     pauseTimer();
-                //     sendToContent('pauseTimer', remainingTime);
-                // }
-                else {
-                    console.log("dont know message from popupJS!");
-                    return;
                 }
             });
 
-            // 연결 종료 이벤트 리스너 / popup이 닫히면 찍힘
             port.onDisconnect.addListener(function () {
                 console.log('Disconnected from popup or content script!');
             });
@@ -52,92 +37,105 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 });
 
-
 // 새 탭 열면 Canvas 그리기 & Reload 시 Canvas 유지
 chrome.tabs.onUpdated.addListener(function (tabId, changeInfo, tab) {
-    console.log('reload!');
     if (changeInfo.status === 'complete' && tab.active) {
-        console.log('tab changed');
-        if (isRunning) {
-            // 현재 타이머가 작동 중이라면
-            console.log('LEFT TIME : ', remainingTime);
-            sendToContent('startTimer', remainingTime, isRunning);
-            // 타이머 실행 중에는 항상 canvas가 보이도록 함
-            sendToContent('showCanvas', true, isRunning);
-        } else {
-            // 현재 타이머가 작동 중이지 않으면
-            console.log('default comming from bg')
-            sendToContent('default', isShowing, isRunning);
-        }
+        console.log('Tab updated, broadcasting state');
+        broadcastState();
     }
 });
 
-// content.js 불러오기, 메세지 보내기
-function sendToContent(action, inputMinuteValue, isRunning) {
+// 진행률 계산 함수
+function calculateElapsedRatio() {
+    if (!timerState.isRunning) return 0;
+
+    if (timerState.startTime) {
+        const elapsedTime = Date.now() - timerState.startTime;
+        return Math.min(elapsedTime / (timerState.duration * 1000), 1.0);
+    } else if (timerState.remainingTime !== null) {
+        return 1 - (timerState.remainingTime / timerState.duration);
+    }
+    return 0;
+}
+
+// 모든 활성 탭에 상태 브로드캐스트
+function broadcastState() {
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
         if (tabs && tabs.length > 0 && tabs[0].id) {
             chrome.scripting.executeScript({
                 target: { tabId: tabs[0].id },
                 files: ['content.js']
             }, function () {
-                // 타이머가 실행 중이면 isShowing을 true로 강제
-                const shouldShow = isRunning ? true : isShowing;
+                // 현재 진행률 계산
+                timerState.elapsedRatio = calculateElapsedRatio();
+                console.log('Broadcasting elapsedRatio:', timerState.elapsedRatio);
 
-                // content.js에 메시지 전달
-                chrome.tabs.sendMessage(tabs[0].id, {
-                    action: action,
-                    inputMinuteValue: inputMinuteValue,
-                    isRunning: isRunning,
-                    isShowing: shouldShow // isShowing 상태 전달
-                });
+                const message = {
+                    action: timerState.isRunning ? 'startTimer' : 'default',
+                    inputMinuteValue: timerState.remainingTime,
+                    isRunning: timerState.isRunning,
+                    isShowing: timerState.isShowing,
+                    elapsedRatio: timerState.elapsedRatio
+                };
+
+                console.log('Broadcasting state:', message);
+                chrome.tabs.sendMessage(tabs[0].id, message);
             });
-        } else {
-            console.error('Unable to execute content script. Invalid tab information.');
         }
     });
-
 }
 
-/* 타이머 컨트롤 */
-
-// 타이머 시작 클릭 시 실행 함수
+// 타이머 시작
 function startTimer(minutes) {
-    isRunning = true;
-    isShowing = true;
+    timerState.isRunning = true;
+    timerState.isShowing = true;
+    timerState.startTime = Date.now();
+    timerState.duration = minutes * 60;
+    timerState.remainingTime = minutes * 60;
+    timerState.elapsedRatio = 0;
+
     clearInterval(timerInterval);
-    if (remainingTime) {
-        setMintoSecTime = remainingTime
-    } else {
-        setMintoSecTime = minutes * 60; // 분을 초로 변환하여 남은 시간으로 설정
-    }
 
     timerInterval = setInterval(function () {
-        const minutesLeft = Math.floor(setMintoSecTime / 60);
-        const secondsLeft = setMintoSecTime % 60;
+        const elapsedTime = Date.now() - timerState.startTime;
+        timerState.remainingTime = Math.max(0, timerState.duration - Math.floor(elapsedTime / 1000));
+        timerState.elapsedRatio = calculateElapsedRatio();
 
-        // popup.js로 분과 초 전송
+        const minutesLeft = Math.floor(timerState.remainingTime / 60);
+        const secondsLeft = timerState.remainingTime % 60;
+
         chrome.runtime.sendMessage({ minutes: minutesLeft, seconds: secondsLeft });
-        if (setMintoSecTime <= 0) {
-            remainingTime = null;
+
+        if (timerState.remainingTime <= 0) {
+            // 타이머 완료 시 알림음 재생
+            chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+                if (tabs && tabs.length > 0 && tabs[0].id) {
+                    chrome.scripting.executeScript({
+                        target: { tabId: tabs[0].id },
+                        func: () => {
+                            const audio = new Audio(chrome.runtime.getURL('alert.mp3'));
+                            audio.play();
+                            alert('타이머가 완료되었습니다!');
+                        }
+                    });
+                }
+            });
             stopTimer();
-            sendToContent('completeTimer');
         } else {
-            remainingTime = setMintoSecTime;
-            setMintoSecTime--;
+            broadcastState();
         }
     }, 1000);
+
+    broadcastState();
 }
 
-
-// 타이머 정지 클릭 시 실행 함수
+// 타이머 정지
 function stopTimer() {
-    isRunning = false;
-    setMintoSecTime = 0;
-    remainingTime = null;
+    timerState.isRunning = false;
+    timerState.startTime = null;
+    timerState.duration = null;
+    timerState.remainingTime = null;
+    timerState.elapsedRatio = 0;
     clearInterval(timerInterval);
+    broadcastState();
 }
-
-// 타이머 일시정지 클릭 시 실행 함수
-// function pauseTimer() {
-//     clearInterval(timerInterval);
-// }

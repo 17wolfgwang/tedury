@@ -8,10 +8,11 @@ let isResize;
 let offscreen;
 let worker;
 let remainTime;
-// let isRunning = false;
+let isRunning = false;
 
 //Resize Canavs
 function resizeCanvas() {
+    if (!canvas || offscreen) return;  // offscreen이 이미 전송된 경우 리사이즈 하지 않음
     isResize = true;
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -26,11 +27,15 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
         isShowing = message.isShowing;
     }
 
+    // isRunning 상태 업데이트
+    if (message.isRunning !== undefined) {
+        isRunning = message.isRunning;
+    }
+
     if (message.action === 'default') {
         // 확장 프로그램 시작 시 Canvas 그리고 default로 숨기기
         if (!message.isRunning) {
             isShowing = message.inputMinuteValue;
-
             defaultTimer();
         } else {
             return;
@@ -43,34 +48,26 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
         canvasDisplayOnOff(isShowing);
     }
     if (message.action === 'startTimer') {
-        console.log('현재 러닝중?:', message.isRunning)
+        console.log('현재 러닝중?:', message.isRunning);
         console.log('현재 showing? : ', isShowing);
-        // 타이머 시작 버튼 클릭 시, inputMin = 입력한 시간 값 , 일시정지 후 inputMin -> remainingTime
-        // if (remainTime) {
-        //     console.log('pause 시간 저장되있음.');
-        //     inputMin = remainTime;
-        // } else {
-        //     console.log('pause시간 없음');
-        //     inputMin = message.inputMinuteValue;
-        // }
+
         inputMin = message.inputMinuteValue;
-        // 타이머가 시작되면 항상 canvas를 보이게 설정
-        isShowing = true;
-        canvasDisplayOnOff(true);
+        isRunning = true;  // 타이머 시작 시 isRunning을 true로 설정
 
-        startTimer();
+        // 백그라운드에서 전송된 진행률 저장
+        const elapsedRatio = message.elapsedRatio || 0;
 
+        // 진행률 정보와 함께 타이머 시작
+        startTimer(elapsedRatio);
     }
-    // if (message.action === 'pauseTimer') {
-    //     remainTime = message.inputMinuteValue;
-    //     pauseTimer();
-    // }
     if (message.action === 'stopTimer') {
         // 타이머 정지 버튼 클릭 시
+        isRunning = false;  // 타이머 정지 시 isRunning을 false로 설정
         remainTime = null;
         stopTimer();
     }
     if (message.action === 'completeTimer') {
+        isRunning = false;  // 타이머 완료 시 isRunning을 false로 설정
         remainTime = null;
         alert('Timer is over!');
         stopTimer();
@@ -101,6 +98,12 @@ function defaultTimer() {
             fetch(chrome.runtime.getURL("worker.js"))
                 .then((response) => response.text())
                 .then((script) => {
+                    // 기존 canvas가 있다면 제거
+                    if (canvas) {
+                        document.body.removeChild(canvas);
+                        canvas = null;
+                    }
+
                     canvas = document.createElement('canvas');
                     canvas.style.backgroundColor = 'white';
                     canvas.style.position = 'fixed';
@@ -109,23 +112,36 @@ function defaultTimer() {
                     canvas.style.width = '100%';
                     canvas.style.height = '100%';
                     canvas.style.zIndex = '9999';
-                    // canvas.style.display = 'none';
                     canvas.className = 'canvas'
+
+                    // 초기 크기 설정
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+
                     console.log('default in content default isshowing:', isShowing)
-                    canvasDisplayOnOff(isShowing);
-                    document.body.appendChild(canvas);
-                    if (!offscreen) {
-                        resizeCanvas();
+
+                    // 타이머가 실행 중이면 항상 캔버스를 보이게 함
+                    if (isRunning) {
+                        canvas.style.display = 'block';
+                    } else {
+                        canvasDisplayOnOff(isShowing);
                     }
+
+                    document.body.appendChild(canvas);
 
                     // canvas 가운데 자르기
                     canvas.style.clipPath = `polygon(0% 0%, 0% 100%, 10px 100%, 10px 10px, calc(100% - 10px) 10px, calc(100% - 10px) calc(100% - 10px), 10px calc(100% - 10px), 10px 100%, 100% 100%, 100% 0%)`
 
-
                     offscreen = canvas.transferControlToOffscreen();
                     // Worker 스크립트 다운로드 완료 후 스크립트 실행
                     worker = new Worker(URL.createObjectURL(new Blob([script])));
-                    worker.postMessage({ workerAction: 'default', canvas: offscreen, width: canvas.width, height: canvas.height }, [offscreen]);
+                    worker.postMessage({
+                        workerAction: 'default',
+                        canvas: offscreen,
+                        width: canvas.width,
+                        height: canvas.height,
+                        isRunning: isRunning  // isRunning 상태 전달
+                    }, [offscreen]);
 
                     resolve();
                 });
@@ -135,10 +151,29 @@ function defaultTimer() {
     })
 }
 
-async function startTimer() {
+//기존
+// async function startTimer() {
+//     await defaultTimer();
+//     worker.postMessage({ workerAction: 'start', width: canvas.width, height: canvas.height, time: inputMin });
+// }
+
+async function startTimer(elapsedRatio) {
     await defaultTimer();
-    worker.postMessage({ workerAction: 'start', width: canvas.width, height: canvas.height, time: inputMin });
+    // 타이머가 실행 중일 때는 항상 캔버스를 보이게 함
+    if (isRunning) {
+        canvasDisplayOnOff(true);
+        // 진행률 정보를 워커에 전달
+        worker.postMessage({
+            workerAction: 'start',
+            width: canvas.width,
+            height: canvas.height,
+            time: inputMin,
+            elapsedRatio: elapsedRatio,  // 진행률 정보 추가
+            isRunning: true  // isRunning 상태 전달
+        });
+    }
 }
+
 // function pauseTimer() {
 //     worker.postMessage({ workerAction: 'pause', time: inputMin });
 // }

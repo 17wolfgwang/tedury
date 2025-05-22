@@ -16,7 +16,8 @@
     "web_accessible_resources": [
         {
             "resources": [
-                "worker.js"
+                "worker.js",
+                "alert.mp3"
             ],
             "matches": [
                 "<all_urls>"
