@@ -14,6 +14,12 @@ self.onmessage = event => {
     }
     const ctx = offscreenCanvas.getContext("2d");
 
+    // 이전 타이머 정리
+    if (intervalDrawing) {
+        clearTimeout(intervalDrawing);
+        intervalDrawing = null;
+    }
+
     // 상태 업데이트
     if (newIsRunning !== undefined) {
         isRunning = newIsRunning;
@@ -23,20 +29,21 @@ self.onmessage = event => {
         console.log('Received elapsedRatio:', elapsedRatio);
     }
 
-    // 이전 타이머 정리
-    if (intervalDrawing) {
-        clearTimeout(intervalDrawing);
-        intervalDrawing = null;
-    }
-
     // 타이머 시작 또는 상태 업데이트
     if (workerAction === 'start' || (workerAction === 'default' && isRunning)) {
         drawSetTime(ctx, width, height, time);
     }
     // 타이머 정지
     else if (workerAction === 'stop') {
+        console.log('Worker received stop action');
         isRunning = false;
-        deleteCanvas(ctx, width, height);
+        elapsedRatio = 0;
+        if (intervalDrawing) {
+            clearTimeout(intervalDrawing);
+            intervalDrawing = null;
+        }
+        // 캔버스 완전히 지우기
+        ctx.clearRect(0, 0, width, height);
     }
 };
 
@@ -72,14 +79,4 @@ function drawSetTime(ctx, width, height, time) {
     if (elapsedRatio < 1) {
         intervalDrawing = setTimeout(() => drawSetTime(ctx, width, height, time), 1000 / 60);
     }
-}
-
-function deleteCanvas(ctx, width, height) {
-    isRunning = false;
-    elapsedRatio = 0;
-    if (intervalDrawing) {
-        clearTimeout(intervalDrawing);
-        intervalDrawing = null;
-    }
-    ctx.clearRect(0, 0, width, height);
 }

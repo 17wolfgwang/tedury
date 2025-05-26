@@ -22,6 +22,8 @@ window.addEventListener("resize", resizeCanvas);
 
 // background.js로 부터 메세지 수신.
 chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+    console.log('Content received message:', message);
+
     // 메시지에서 isShowing 상태 추출
     if (message.isShowing !== undefined) {
         isShowing = message.isShowing;
@@ -60,10 +62,17 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
         // 진행률 정보와 함께 타이머 시작
         startTimer(elapsedRatio);
     }
-    if (message.action === 'stopTimer') {
-        // 타이머 정지 버튼 클릭 시
-        isRunning = false;  // 타이머 정지 시 isRunning을 false로 설정
+    if (message.action === 'stop') {
+        console.log('Content received stop action');
+        isRunning = false;
         remainTime = null;
+        if (worker) {
+            worker.postMessage({
+                workerAction: 'stop',
+                width: canvas.width,
+                height: canvas.height
+            });
+        }
         stopTimer();
     }
     if (message.action === 'completeTimer') {
